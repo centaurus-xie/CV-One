@@ -1,0 +1,216 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ExperienceType {
+  ROLE
+  PROJECT
+  INITIATIVE
+}
+
+enum ConsistencyIssueType {
+  UNSUPPORTED_CLAIM
+  TIMELINE_CONFLICT
+  SCOPE_INFLATION
+  UNCLEAR_TRANSITION
+}
+
+enum ConsistencySeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ConsistencyCheckSource {
+  TRACEABILITY
+  RULE_ENGINE
+  LLM_ASSIST
+}
+
+model Experience {
+  id            String                  @id @default(cuid())
+  type          ExperienceType
+  title         String
+  organization  String?
+  startDate     DateTime?
+  endDate       DateTime?
+  location      String?
+  summary       String?
+  responsibilities String[]
+  outcomes      String[]
+  skills        String[]
+  tools         String[]
+  evidenceNotes String[]
+  sourceText    String?
+  confidenceLevel Float?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  signals       ExperienceSignal[]
+  interviewAnswerDrafts InterviewAnswerDraft[] @relation("InterviewAnswerSupportingExperiences")
+  resumeVariants ResumeVariant[]         @relation("ResumeVariantSelectedExperiences")
+  narrativePlans NarrativePlan[]         @relation("NarrativePlanSupportingExperiences")
+}
+
+model JobTarget {
+  id                 String                       @id @default(cuid())
+  jobTitle           String
+  company            String?
+  jobDescriptionRaw  String
+  responsibilities   String[]
+  requirements       String[]
+  preferenceSignals  String[]
+  roleKeywords       String[]
+  sourceText         String?
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+
+  narrativeAdjustmentStrategies NarrativeAdjustmentStrategy[]
+  transitionLogics              TransitionLogic[]
+  narrativePlans                NarrativePlan[]
+}
+
+model NarrativeAdjustmentStrategy {
+  id                String     @id @default(cuid())
+  jobTargetId       String
+  emphasizePoints   String[]
+  downplayPoints    String[]
+  transitionAngles  String[]
+  roleFitHypotheses String[]
+  sourceText        String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  jobTarget         JobTarget  @relation(fields: [jobTargetId], references: [id], onDelete: Cascade)
+}
+
+model ExperienceSignal {
+  id            String            @id @default(cuid())
+  experienceId  String
+  signalType    String
+  signalText    String
+  evidenceRefs  String[]
+  confidence    Float?
+  sourceText    String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  experience    Experience        @relation(fields: [experienceId], references: [id], onDelete: Cascade)
+  themes        NarrativeTheme[]  @relation("ThemeSignals")
+}
+
+model NarrativeTheme {
+  id                     String             @id @default(cuid())
+  themeName              String
+  description            String
+  supportingExperienceIds String[]
+  sourceText             String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  signals                ExperienceSignal[] @relation("ThemeSignals")
+  transitionLogics       TransitionLogic[]  @relation("TransitionLogicThemes")
+}
+
+model TransitionLogic {
+  id               String           @id @default(cuid())
+  jobTargetId      String
+  logicSummary     String
+  riskPoints       String[]
+  missingLinks     String[]
+  sourceText       String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  jobTarget        JobTarget        @relation(fields: [jobTargetId], references: [id], onDelete: Cascade)
+  themes           NarrativeTheme[] @relation("TransitionLogicThemes")
+  narrativePlans   NarrativePlan[]
+}
+
+model NarrativePlan {
+  id                    String           @id @default(cuid())
+  jobTargetId           String
+  transitionLogicId     String?
+  positioningStatement  String
+  careerStorySummary    String
+  transitionLogic       String
+  coreThemes            String[]
+  strengthsToEmphasize  String[]
+  downplayPoints        String[]
+  risksToAddress        String[]
+  claimsToAvoid         String[]
+  evidenceGaps          String[]
+  sourceText            String?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  jobTarget             JobTarget        @relation(fields: [jobTargetId], references: [id], onDelete: Cascade)
+  transitionLogicNode   TransitionLogic? @relation(fields: [transitionLogicId], references: [id], onDelete: SetNull)
+  supportingExperiences Experience[]     @relation("NarrativePlanSupportingExperiences")
+  resumeVariants        ResumeVariant[]
+}
+
+model ResumeVariant {
+  id                String           @id @default(cuid())
+  narrativePlanId   String
+  summary           String?
+  experienceBullets String[]
+  skillsSection     String[]
+  tailoringNotes    String[]
+  traceabilityMap   Json
+  sourceText        String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  narrativePlan     NarrativePlan    @relation(fields: [narrativePlanId], references: [id], onDelete: Cascade)
+  selectedExperiences Experience[]   @relation("ResumeVariantSelectedExperiences")
+  interviewQuestionSets InterviewQuestionSet[]
+}
+
+model InterviewQuestionSet {
+  id               String                 @id @default(cuid())
+  resumeVariantId  String
+  questions        String[]
+  sourceText       String?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  resumeVariant    ResumeVariant          @relation(fields: [resumeVariantId], references: [id], onDelete: Cascade)
+  answerDrafts     InterviewAnswerDraft[]
+}
+
+model InterviewAnswerDraft {
+  id                     String            @id @default(cuid())
+  interviewQuestionSetId String
+  question               String
+  answerOutline          String
+  riskFlags              String[]
+  userReviewStatus       String?
+  sourceText             String?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  interviewQuestionSet   InterviewQuestionSet @relation(fields: [interviewQuestionSetId], references: [id], onDelete: Cascade)
+  supportingExperiences  Experience[]         @relation("InterviewAnswerSupportingExperiences")
+}
+
+model ConsistencyCheck {
+  id                   String                 @id @default(cuid())
+  entityType           String
+  entityId             String
+  issueType            ConsistencyIssueType
+  severity             ConsistencySeverity
+  message              String
+  relatedExperienceIds String[]
+  checkSource          ConsistencyCheckSource
+  sourceText           String?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  @@index([entityType, entityId])
+}
